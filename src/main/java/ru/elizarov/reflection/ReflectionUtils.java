@@ -82,6 +82,7 @@ public class ReflectionUtils {
                 Validate validate = clazz.getAnnotation(Validate.class);
                 for (Class<?> testClass : validate.value()) {
                     Method testMethod = testClass.getMethod("test", Object.class);
+                    testMethod.setAccessible(true);
                     String result = (String) testMethod.invoke(null, obj);
                     if (!"OK".equals(result)) {
                         throw new ValidateException(result);
@@ -97,20 +98,28 @@ public class ReflectionUtils {
     public static void cache(Object... objects) {
         for (Object obj : objects) {
             Class<?> clazz = obj.getClass();
-            if (clazz.isAnnotationPresent(Cache.class)) {
-                Cache cacheAnn = clazz.getAnnotation(Cache.class);
-                String[] methodsToCache = cacheAnn.value();
-                boolean cacheAll = methodsToCache.length == 0;
+            Method[] methods = clazz.getDeclaredMethods();
+            for (Method method : methods) {
+                boolean shouldCache = false;
+                String[] methodsToCache = {};
 
-                Method[] methods = clazz.getDeclaredMethods();
-                for (Method method : methods) {
-                    if (cacheAll || Arrays.asList(methodsToCache).contains(method.getName())) {
-                        method.setAccessible(true);
-                        String key = clazz.getName() + "." + method.getName();
-                        if (!cache.containsKey(key)) {
-                            Object result = method.invoke(obj);
-                            cache.put(key, result);
-                        }
+                if (clazz.isAnnotationPresent(Cache.class)) {
+                    Cache cacheAnn = clazz.getAnnotation(Cache.class);
+                    methodsToCache = cacheAnn.value();
+                    boolean cacheAll = methodsToCache.length == 0;
+                    shouldCache = cacheAll || Arrays.asList(methodsToCache).contains(method.getName());
+                }
+
+                if (method.isAnnotationPresent(Cache.class)) {
+                    shouldCache = true;
+                }
+
+                if (shouldCache) {
+                    method.setAccessible(true);
+                    String key = clazz.getSimpleName() + "." + method.getName(); // либо clazz.getName()
+                    if (!cache.containsKey(key)) {
+                        Object result = method.invoke(obj);
+                        cache.put(key, result);
                     }
                 }
             }
